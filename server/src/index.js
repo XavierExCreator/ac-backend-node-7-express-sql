@@ -1,0 +1,198 @@
+// ---------------------------------
+// Boilerplate Code to Set Up Server
+// ---------------------------------
+
+//importing Node Modules
+
+import express from "express";
+import pg from "pg"; //pg stands for PostreSQL, for connecting the database
+import config from "./config.js"; //importing the connection string to out database posted on neon
+
+//connecting to put PostgreSQL database, or db for short
+const db = new pg.Pool({
+    connectionString: config.databaseUrl, //credential to access the database. Keep this part private in the gitignore file section
+    ssl: true //use SSL encryption when connecting to the database
+    });
+
+//create an instance of the Express module, which gives us access to all of the Express’s function, methods, useful superpowers
+
+const app = express()
+
+//This server will receive and respond with JSON data
+app.use(express.json());
+
+const port = 3000;
+
+app.listen(port, () => {
+    console.log(`Server is listening on port ${port}!`);
+    });
+
+// ---------------------------------
+// Helper Functions
+// ---------------------------------
+
+// 1. getAllAnimals()
+async function getAllAnimals() {
+    // db.query lets us request the SQL database
+    const data = await db.query("SELECT * FROM animals ORDER BY id ASC");
+    return data.rows; //We have to use dot notation to get value of the rows property from the data object
+    }
+
+// 2. getOneAnimalByName(name)
+async function getOneAnimalByName(name) {
+    const data = await db.query("SELECT * FROM animals WHERE name = $1", [name]);
+    return data.rows[0];
+    }
+
+// 3. getOneAnimalById(id)
+async function getOneAnimalById(id) {
+    const data = await db.query("SELECT * FROM animals WHERE id = $1", [id]);
+    return data.rows[0];
+}
+
+// 4. getNewestAnimal()
+async function getNewestAnimal() {
+    const data = await db.query("SELECT * FROM animals ORDER BY id DESC LIMIT 1");
+    return data.rows[0];
+}
+
+// 5. deleteOneAnimal(id)
+async function deleteOneAnimal(id) {
+    const deletedAnimal = await db.query("DELETE FROM animals WHERE id = $1 RETURNING *", [id]);
+    return deletedAnimal.rows[0];
+}
+
+// 6. addOneAnimal(name, category, can_fly, lives_in)
+async function addOneAnimal(name, category, can_fly, lives_in) {
+         // we declared db in our boilerplate code, which connects us to the SQL database
+         // The db.query() method lets us write SQL code to query the database. db.query() takes in two parameters
+         // 1. The SQL command
+         // 2. An array that contains dynamic values that we inject into the SQL command
+         // The SQL query needs to be written all in one line, using $1 - $4 as placeholder for dynamic values. 
+         // This method is a lot more secure than template literals
+    await db.query("INSERT INTO animals (name, category, can_fly, lives_in) VALUES($1, $2, $3, $4)", [name, category, can_fly, lives_in]);
+    }
+
+// 7. updateOneAnimalName(id, newName)
+async function updateOneAnimalName(id, newName) {
+await db.query("UPDATE animals SET name = $1 WHERE id = $2", [newName, id]);
+}
+
+// 8. updateOneAnimalCategory(id, newCategory)
+async function updateOneAnimalCategory(id, newCategory) {
+    await db.query("UPDATE animals SET name = $1 WHERE id = $2", [newCategory, id]);
+}
+
+// ---------------------------------
+// API Endpoints
+// ---------------------------------
+
+// 1. GET /get-all-animals
+app.get("/get-all-animals", async (req, res) => {
+    const animals = await getAllAnimals();
+    res.json(animals);
+});
+
+// 2. GET /get-one-animal-by-name/:name
+app.get("/get-one-animal-by-name/:index", async (req, res) => {
+    const name = req.params.name
+    const animal = await getOneAnimalByName(name);
+    res.json(animal);
+});
+
+// 3. GET /get-one-animal-by-id/:id
+app.get("/get-one-animal-by-id/:id", async (req, res) => {
+    const id = req.params.id
+    const animal = await getOneAnimalById(id);
+    res.json(animal);
+});
+
+// 4. GET /get-newest-animal
+app.get("/get-newest-animal", async (req, res) => {
+    const animal = await getNewestAnimal();
+    res.json(animal);
+}); 
+
+// 5. POST /delete-one-animal/:id
+app.post("/delete-one-animal/:id", async ( req, res) => {
+    const id = req.params.id 
+    const deletedAnimal = await deleteOneAnimal(id);
+    res.json(deletedAnimal);
+})
+
+// 6. POST /add-one-animal
+/*
+ //app.post() takes in two parameters:
+ //1. The URL path for the endpoint
+ //2. The callback function that gets triggered when we send a request to the endpoint URL
+*/
+app.post("/add-one-animal", async ( req, res) => {
+    /*
+     //we access whatever was sent in the request body and save it in this variable
+    */
+    const animal = req.body;
+    const {name, category, can_fly, lives_in } = req.body
+     //Calling the helper function
+     //we aren’t declaring a variable because our helper function doesn’t need to return anything
+    await addOneAnimal(name, category, can_fly, lives_in);
+    /* 
+     //Sending a response as text, so we use res.send() which sends text 
+     //If we wanted to send a response as JSON data(which would need to be an object or an array to be valid JSON), we would use res.json()
+*/
+    res.send(`This new animal has successfully been added`);
+})
+
+    // 7. POST /update-one-animal-name
+  app.post("/update-one-animal-name-with-error-handling", async (req, res) => {
+    try {
+     /* // Possible errors:
+      // DONE: 400 Bad Request: what should we do when there's no body?
+      // 500 Internal Server Error: when a unique constraint is violated
+      // 404 Resource Not Found: using camelCase for the api endpoint
+      // 404 Resource Not Found: no existing animal was found with the given id
+      */
+      const { id, newName } = req.body;
+  
+      // check for missing required fields in the request body: id and newName
+      if (!newName || !id) {
+        /*
+        // return error message with 400 Bad Request status code, because the request was badly formed with wrong syntax.
+        // All 4xx status codes are client-side errors, which means the client sent a bad request
+        */
+        return res.status(400).send("Error: Missing required fields");
+      }
+  
+      await updateOneAnimalName(id, newName);
+  
+      res.send(`Success! The animal's name was updated.`);
+    } catch (error) {
+      res.status(500).send("Internal Server Error");
+    }
+  });
+
+// 8. POST /update-one-animal-category
+app.post("/update-one-animal-category-with-error-handling", async (req, res) => {
+    try {
+     /* // Possible errors:
+      // DONE: 400 Bad Request: what should we do when there's no body?
+      // 500 Internal Server Error: when a unique constraint is violated
+      // 404 Resource Not Found: using camelCase for the api endpoint
+      // 404 Resource Not Found: no existing animal was found with the given id
+      */
+      const { id, newCategory } = req.body;
+      // check for missing required fields in the request body: id and newName
+      if (!newCategory || !id) {
+        /*
+        // return error message with 400 Bad Request status code, because the request was badly formed with wrong syntax.
+        // All 4xx status codes are client-side errors, which means the client sent a bad request
+        */
+        return res.status(400).send("Error: Missing required fields");
+      }
+      console.log(req.body);
+      await updateOneAnimalName(id, newCategory);
+  
+      res.send(`Success! The animal's category was updated.`);
+    } catch (error) {
+      res.status(500).send("Internal Server Error");
+    }
+  });
