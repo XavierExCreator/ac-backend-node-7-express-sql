@@ -130,7 +130,6 @@ app.post("/add-one-animal", async ( req, res) => {
     /*
      //we access whatever was sent in the request body and save it in this variable
     */
-    const animal = req.body;
     const {name, category, can_fly, lives_in } = req.body
      //Calling the helper function
      //we aren’t declaring a variable because our helper function doesn’t need to return anything
